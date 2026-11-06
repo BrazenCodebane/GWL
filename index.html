@@ -68,14 +68,15 @@
 
     <!-- Live Telemetry Badges -->
     <div class="hidden md:flex items-center space-x-4 font-mono text-xs">
+      <div class="flex items-center space-x-2 bg-brand-bg px-3 py-1.5 rounded border border-brand-border cursor-pointer hover:border-brand-accent" id="btn-open-bt-modal" title="Configure Bluetooth TNC">
+        <span id="bt-hud-dot" class="w-2 h-2 rounded-full bg-brand-amber animate-pulse"></span>
+        <span class="text-brand-muted">BT TNC:</span>
+        <span class="font-bold text-brand-text" id="bt-hud-label">DISCONNECTED</span>
+      </div>
       <div class="flex items-center space-x-2 bg-brand-bg px-3 py-1.5 rounded border border-brand-border">
         <span class="w-2 h-2 rounded-full bg-brand-accent animate-pulse"></span>
         <span class="text-brand-muted">RF FREQ:</span>
         <span class="font-bold text-brand-text">144.390 MHz</span>
-      </div>
-      <div class="flex items-center space-x-2 bg-brand-bg px-3 py-1.5 rounded border border-brand-border">
-        <span class="text-brand-muted">TNC LINK:</span>
-        <span class="font-bold text-brand-accent">AIOC (USB-C)</span>
       </div>
       <div class="flex items-center space-x-2 bg-brand-bg px-3 py-1.5 rounded border border-brand-border">
         <span class="text-brand-muted">GATEWAY:</span>
@@ -91,6 +92,17 @@
       </button>
     </div>
   </header>
+
+  <!-- DISCONNECT TACTICAL ALERT BANNER -->
+  <div id="bt-alert-banner" class="bg-brand-red text-white px-4 py-2 text-xs font-mono font-bold flex items-center justify-between shadow-md hidden z-20">
+    <div class="flex items-center space-x-2">
+      <svg class="w-4 h-4 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+      <span id="bt-alert-text">WARNING: BLUETOOTH TNC CONNECTION LOST</span>
+    </div>
+    <button id="btn-reconnect-quick" class="px-2.5 py-1 bg-white text-brand-red rounded hover:bg-gray-100 transition-all font-bold">
+      RECONNECT
+    </button>
+  </div>
 
   <!-- MAIN APPS WRAPPER -->
   <div class="flex-1 flex overflow-hidden relative">
@@ -209,6 +221,41 @@
 
   </div>
 
+  <!-- BLUETOOTH DEVICE SELECTION MODAL -->
+  <div id="bt-modal" class="fixed inset-0 bg-gray-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-brand-panel border border-brand-border rounded-lg shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[80vh]">
+      
+      <!-- Modal Header -->
+      <div class="px-4 py-3 bg-brand-bg border-b border-brand-border flex items-center justify-between">
+        <div class="flex items-center space-x-2">
+          <span class="w-2.5 h-2.5 rounded-full bg-brand-cyan animate-pulse"></span>
+          <h3 class="font-bold text-sm font-mono tracking-wide text-brand-text">SELECT BLUETOOTH TNC</h3>
+        </div>
+        <button id="close-bt-modal" class="text-brand-muted hover:text-brand-text p-1">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+      </div>
+
+      <!-- Device List Container -->
+      <div class="p-4 overflow-y-auto flex-1 space-y-2 font-mono text-xs" id="bt-device-list">
+        <div class="text-center py-6 text-brand-muted">Click "Scan Devices" to search for paired TNCs.</div>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="p-3 bg-brand-bg border-t border-brand-border flex items-center justify-between">
+        <span class="text-xs font-mono text-brand-muted" id="bt-status-text">Status: Disconnected</span>
+        <div class="flex space-x-2">
+          <button id="btn-scan-bt" class="px-3 py-1.5 bg-brand-panel border border-brand-border hover:border-brand-accent text-brand-text font-mono font-semibold rounded text-xs transition-all shadow-sm">
+            SCAN DEVICES
+          </button>
+          <button id="btn-cancel-bt" class="px-3 py-1.5 bg-brand-accent text-white font-mono font-bold rounded text-xs hover:bg-emerald-600 transition-all shadow-sm">
+            CLOSE
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- JAVASCRIPT LOGIC ENGINE -->
   <script>
     // --- STATE MANAGEMENT ---
@@ -242,16 +289,15 @@
       seqCounter: 1
     };
 
-    // --- AUDIO SYNTHESIZER (TONE.JS AFSK SIMULATION) ---
+    // --- AUDIO SYNTHESIZER & TACTICAL BEEPS (TONE.JS) ---
     function playAFSKBurst() {
       try {
+        if (Tone.context.state !== 'running') { Tone.start(); }
         const synth = new Tone.Synth({
           oscillator: { type: 'sine' },
           envelope: { attack: 0.005, decay: 0.05, sustain: 0.8, release: 0.01 }
         }).toDestination();
-
         const now = Tone.now();
-        // Bell 202 Tones: 1200Hz (Mark) & 2200Hz (Space)
         synth.triggerAttackRelease(1200, 0.03, now);
         synth.triggerAttackRelease(2200, 0.03, now + 0.03);
         synth.triggerAttackRelease(1200, 0.03, now + 0.06);
@@ -259,6 +305,32 @@
       } catch (e) {
         console.log('Audio Context restricted or pending interaction');
       }
+    }
+
+    function playPacketArrivalBeep() {
+      try {
+        if (Tone.context.state !== 'running') { Tone.start(); }
+        const synth = new Tone.Synth({
+          oscillator: { type: 'sine' },
+          envelope: { attack: 0.005, decay: 0.1, sustain: 0.1, release: 0.05 }
+        }).toDestination();
+        const now = Tone.now();
+        synth.triggerAttackRelease(1760, 0.06, now);
+        synth.triggerAttackRelease(2637, 0.08, now + 0.08);
+      } catch (e) {}
+    }
+
+    function playTacticalAlertAlarm() {
+      try {
+        if (Tone.context.state !== 'running') { Tone.start(); }
+        const synth = new Tone.Synth({
+          oscillator: { type: 'sawtooth' },
+          envelope: { attack: 0.01, decay: 0.2, sustain: 0.2, release: 0.1 }
+        }).toDestination();
+        const now = Tone.now();
+        synth.triggerAttackRelease(440, 0.15, now);
+        synth.triggerAttackRelease(330, 0.15, now + 0.18);
+      } catch (e) {}
     }
 
     // --- DOM ELEMENTS ---
@@ -276,10 +348,134 @@
     const btnPing = document.getElementById('btn-ping');
     const rttDisplay = document.getElementById('rtt-display');
 
+    // Bluetooth & Alert Elements
+    const btModal = document.getElementById('bt-modal');
+    const btnOpenBtModal = document.getElementById('btn-open-bt-modal');
+    const closeBtModalBtn = document.getElementById('close-bt-modal');
+    const btnCancelBt = document.getElementById('btn-cancel-bt');
+    const btnScanBt = document.getElementById('btn-scan-bt');
+    const btDeviceList = document.getElementById('bt-device-list');
+    const btStatusText = document.getElementById('bt-status-text');
+    const btHudLabel = document.getElementById('bt-hud-label');
+    const btHudDot = document.getElementById('bt-hud-dot');
+    const btAlertBanner = document.getElementById('bt-alert-banner');
+    const btAlertText = document.getElementById('bt-alert-text');
+    const btnReconnectQuick = document.getElementById('btn-reconnect-quick');
+
     const activeNameEl = document.getElementById('active-name');
     const activeTargetEl = document.getElementById('active-target');
     const activeAvatarEl = document.getElementById('active-avatar');
     const btnBack = document.getElementById('btn-back');
+
+    // --- BLUETOOTH DISCONNECT & RECONNECT HANDLING ---
+    function handleBluetoothDisconnect(reason = 'Connection lost') {
+      btAlertBanner.classList.remove('hidden');
+      btAlertText.innerText = `WARNING: TNC DISCONNECTED (${reason})`;
+      btHudLabel.innerText = 'DISCONNECTED';
+      btHudDot.className = 'w-2 h-2 rounded-full bg-brand-red animate-ping';
+      logTerminal(`CRITICAL: Bluetooth SPP link dropped! Reason: ${reason}`, 'TX');
+      playTacticalAlertAlarm();
+    }
+
+    btnReconnectQuick.onclick = () => {
+      btAlertBanner.classList.add('hidden');
+      openBluetoothModal();
+    };
+
+    // --- BLUETOOTH MODAL & STORAGE LOGIC ---
+    function openBluetoothModal() {
+      btModal.classList.remove('hidden');
+      scanBluetoothDevices();
+    }
+
+    function closeBluetoothModal() {
+      btModal.classList.add('hidden');
+    }
+
+    btnOpenBtModal.onclick = openBluetoothModal;
+    closeBtModalBtn.onclick = closeBluetoothModal;
+    btnCancelBt.onclick = closeBluetoothModal;
+
+    async function scanBluetoothDevices() {
+      btDeviceList.innerHTML = `<div class="text-center py-6 text-brand-muted animate-pulse">Scanning paired TNC hardware...</div>`;
+      
+      try {
+        const mockDevices = [
+          { name: 'ESP32-CYD-TNC', address: '24:6F:28:AE:12:34' },
+          { name: 'AIOC-Audio-Interface', address: '98:D3:31:F4:56:78' },
+          { name: 'HC-05-TNC', address: '00:14:03:06:88:99' }
+        ];
+
+        setTimeout(() => {
+          btDeviceList.innerHTML = '';
+          if (mockDevices.length === 0) {
+            btDeviceList.innerHTML = `<div class="text-center py-6 text-brand-muted">No paired Bluetooth devices found. Pair your ESP32 in Android Bluetooth settings first.</div>`;
+            return;
+          }
+
+          mockDevices.forEach(device => {
+            const item = document.createElement('div');
+            item.className = 'p-3 bg-brand-bg border border-brand-border hover:border-brand-accent rounded flex items-center justify-between cursor-pointer transition-all';
+            item.innerHTML = `
+              <div>
+                <div class="font-bold text-brand-text">${device.name}</div>
+                <div class="text-[10px] text-brand-muted">${device.address}</div>
+              </div>
+              <button class="px-2.5 py-1 bg-brand-accentLight border border-brand-accent text-brand-accent font-bold rounded text-xs hover:bg-emerald-200">
+                CONNECT
+              </button>
+            `;
+            
+            item.querySelector('button').onclick = async () => {
+              btStatusText.innerText = `Connecting to ${device.name}...`;
+              item.querySelector('button').innerText = 'CONNECTING...';
+              
+              setTimeout(() => {
+                localStorage.setItem('graywolf_last_tnc_address', device.address);
+                localStorage.setItem('graywolf_last_tnc_name', device.name);
+
+                btStatusText.innerText = `Connected: ${device.name}`;
+                btHudLabel.innerText = device.name;
+                btHudDot.className = 'w-2 h-2 rounded-full bg-brand-accent animate-pulse';
+                btAlertBanner.classList.add('hidden');
+                
+                logTerminal(`Connected to Bluetooth TNC [${device.name} - ${device.address}]`, 'RX');
+                item.querySelector('button').innerText = 'CONNECTED';
+                item.querySelector('button').className = 'px-2.5 py-1 bg-brand-accent text-white font-bold rounded text-xs';
+                
+                setTimeout(closeBluetoothModal, 800);
+              }, 1000);
+            };
+
+            btDeviceList.appendChild(item);
+          });
+        }, 600);
+      } catch (error) {
+        btDeviceList.innerHTML = `<div class="text-center py-6 text-brand-red">Error scanning devices: ${error}</div>`;
+      }
+    }
+
+    btnScanBt.onclick = scanBluetoothDevices;
+
+    // Auto-connect on app launch using localStorage
+    function initAutoConnect() {
+      const savedAddress = localStorage.getItem('graywolf_last_tnc_address');
+      const savedName = localStorage.getItem('graywolf_last_tnc_name') || 'ESP32 TNC';
+
+      if (!savedAddress) {
+        logTerminal('No previously paired TNC found in local storage.', 'SYS');
+        return;
+      }
+
+      logTerminal(`Auto-connecting to last known TNC (${savedName} - ${savedAddress})...`, 'SYS');
+      btHudLabel.innerText = 'RECONNECTING...';
+
+      setTimeout(() => {
+        btHudLabel.innerText = savedName;
+        btHudDot.className = 'w-2 h-2 rounded-full bg-brand-accent animate-pulse';
+        logTerminal(`Successfully auto-connected to ${savedName} over Bluetooth SPP.`, 'RX');
+      }, 1500);
+    }
 
     // --- RENDER CONTACTS ---
     function renderContacts() {
@@ -350,7 +546,6 @@
       rttDisplay.innerText = '-- ms';
       renderContacts();
       renderChat();
-      // Mobile responsive toggle
       sidebar.classList.add('hidden', 'md:flex');
     }
 
@@ -391,6 +586,7 @@
         pingMsg.status = 'ack';
         renderChat();
         logTerminal(`SMSGTE>KJ5NOV-7,WIDE1*::KJ5NOV   :ack${seq}`, 'RX');
+        playPacketArrivalBeep();
       }, 950);
     };
 
@@ -404,23 +600,21 @@
       const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       const seq = String(state.seqCounter++).padStart(2, '0');
 
-      // 1. Add locally
       const newMsg = { id: Date.now(), sender: 'me', text, time: timeStr, status: 'sending' };
       contact.messages.push(newMsg);
       renderChat();
       messageInput.value = '';
       charCounter.innerText = '0/67';
 
-      // 2. Play AFSK sound & Log AX.25 Frame
       playAFSKBurst();
       const rawAX25 = `KJ5NOV-7>APRS,WIDE1-1::SMSGTE   :@${contact.phone} ${text}{${seq}`;
       logTerminal(rawAX25, 'TX');
 
-      // 3. Simulate ACK over-the-air after 1.2 seconds
       setTimeout(() => {
         newMsg.status = 'ack';
         renderChat();
         logTerminal(`SMSGTE>KJ5NOV-7,WIDE1*::KJ5NOV   :ack${seq}`, 'RX');
+        playPacketArrivalBeep();
       }, 1200);
     };
 
@@ -439,23 +633,15 @@
     });
 
     // --- TERMINAL DRAWER TOGGLES ---
-    toggleTerminalBtn.onclick = () => {
-      terminalDrawer.classList.remove('translate-x-full');
-    };
-    closeTerminalBtn.onclick = () => {
-      terminalDrawer.classList.add('translate-x-full');
-    };
-    clearTerminalBtn.onclick = () => {
-      terminalLog.innerHTML = '<div class="text-gray-500">// Terminal log cleared.</div>';
-    };
-
-    btnBack.onclick = () => {
-      sidebar.classList.remove('hidden');
-    };
+    toggleTerminalBtn.onclick = () => terminalDrawer.classList.remove('translate-x-full');
+    closeTerminalBtn.onclick = () => terminalDrawer.classList.add('translate-x-full');
+    clearTerminalBtn.onclick = () => terminalLog.innerHTML = '<div class="text-gray-500">// Terminal log cleared.</div>';
+    btnBack.onclick = () => sidebar.classList.remove('hidden');
 
     // --- INITIALIZATION ---
     renderContacts();
     renderChat();
+    initAutoConnect();
   </script>
 </body>
 </html>
