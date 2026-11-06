@@ -19,9 +19,6 @@ workflows:
           include: true
 
     scripts:
-      - name: Set up Android SDK location
-        script: 
-
       - name: Grant execution rights to Gradle wrapper
         script: |
           cd android
