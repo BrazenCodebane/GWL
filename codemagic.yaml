@@ -20,17 +20,17 @@ workflows:
 
     scripts:
       - name: Set up Android SDK location
-        script: |
-          echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/android/local.properties" || true
+        script: 
 
-      - name: Get Flutter dependencies
+      - name: Grant execution rights to Gradle wrapper
         script: |
-          flutter pub get
+          cd android
+          chmod +x gradlew
 
-      - name: Build Android Release APK & Bundle
+      - name: Build Native Android Release APK
         script: |
-          flutter build apk --release --build-number=$BUILD_NUMBER
-          flutter build appbundle --release --build-number=$BUILD_NUMBER
+          cd android
+          ./gradlew assembleRelease
           
       - name: Ensure Bluetooth Permissions in AndroidManifest
         script: |
