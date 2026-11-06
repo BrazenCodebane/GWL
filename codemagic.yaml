@@ -115,6 +115,12 @@ workflows:
         script: |
           echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/android/local.properties"
 
+
+      - name: Pin Gradle Wrapper to Version 8.7
+        script: |
+          sed -i 's/distributionUrl=.*\/gradle-.*-all.zip/distributionUrl=https\:\/\/services.gradle.org\/distributions\/gradle-8.7-all.zip/' android/gradle/wrapper/gradle-wrapper.properties
+
+
       - name: Build Debug APK via Gradle
         script: |
           cd android
