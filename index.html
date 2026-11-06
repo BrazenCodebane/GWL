@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>APRS-Lite Dashboard - Light Mode</title>
+  <title>Graywolf APRS Tactical Dashboard - Light Mode</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
   <script>
@@ -129,22 +129,27 @@
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
           </button>
           <div class="w-10 h-10 rounded-full bg-brand-cyanLight border border-brand-cyan flex items-center justify-center font-bold text-brand-cyan font-mono text-sm" id="active-avatar">
-            SK
+            T1
           </div>
           <div>
             <h2 class="font-bold text-sm text-brand-text flex items-center gap-2" id="active-name">
-              Saraya Kingsley
+              Test One
             </h2>
             <p class="text-xs font-mono text-brand-muted" id="active-target">
-              TARGET: <span class="text-brand-cyan font-bold">SMSGTE</span> (@18175550199)
+              TARGET: <span class="text-brand-cyan font-bold">SMSGTE</span> (@0123456789)
             </p>
           </div>
         </div>
 
+        <!-- Ping Action & Telemetry Header -->
         <div class="flex items-center space-x-3 font-mono text-xs">
+          <button id="btn-ping" class="px-3 py-1.5 bg-brand-accentLight border border-brand-accent text-brand-accent hover:bg-emerald-100 font-bold rounded flex items-center gap-1.5 transition-all shadow-sm">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+            <span>PING</span>
+          </button>
           <div class="hidden sm:flex flex-col items-end text-brand-muted">
-            <span>PACKET STATUS: <strong class="text-brand-accent" id="status-ack">ACK 100%</strong></span>
-            <span>BEARING: <strong class="text-brand-text">240° SW (1.4 mi)</strong></span>
+            <span>PACKET STATUS: <strong class="text-brand-accent" id="status-ack">ONLINE</strong></span>
+            <span>RTT: <strong class="text-brand-text" id="rtt-display">-- ms</strong></span>
           </div>
         </div>
       </div>
@@ -268,6 +273,8 @@
     const toggleTerminalBtn = document.getElementById('toggle-terminal');
     const closeTerminalBtn = document.getElementById('close-terminal');
     const clearTerminalBtn = document.getElementById('clear-terminal');
+    const btnPing = document.getElementById('btn-ping');
+    const rttDisplay = document.getElementById('rtt-display');
 
     const activeNameEl = document.getElementById('active-name');
     const activeTargetEl = document.getElementById('active-target');
@@ -319,7 +326,7 @@
         const statusIcon = isMe 
           ? (msg.status === 'ack' 
               ? `<span class="text-brand-accent font-bold">✓✓ ACK</span>` 
-              : `<span class="text-brand-amber font-bold animate-pulse">⏳ ENQUEUED</span>`)
+              : `<span class="text-brand-amber font-bold animate-pulse">⏳ PENDING</span>`)
           : '';
 
         msgEl.innerHTML = `
@@ -340,6 +347,7 @@
     // --- SELECT CONTACT ---
     function selectContact(id) {
       state.activeContactId = id;
+      rttDisplay.innerText = '-- ms';
       renderContacts();
       renderChat();
       // Mobile responsive toggle
@@ -358,6 +366,33 @@
       terminalLog.appendChild(entry);
       terminalLog.scrollTop = terminalLog.scrollHeight;
     }
+
+    // --- PING FEATURE LOGIC ---
+    btnPing.onclick = () => {
+      const contact = state.contacts.find(c => c.id === state.activeContactId);
+      const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const seq = String(state.seqCounter++).padStart(2, '0');
+      const startTime = performance.now();
+
+      rttDisplay.innerText = 'Pinging...';
+      playAFSKBurst();
+
+      const rawAX25 = `KJ5NOV-7>APRS,WIDE1-1::SMSGTE   :@${contact.phone} PING?{${seq}`;
+      logTerminal(rawAX25, 'TX');
+
+      const pingMsg = { id: Date.now(), sender: 'me', text: '⚡ PING TEST REQUEST', time: timeStr, status: 'sending' };
+      contact.messages.push(pingMsg);
+      renderChat();
+
+      setTimeout(() => {
+        const endTime = performance.now();
+        const rtt = Math.round(endTime - startTime);
+        rttDisplay.innerText = `${rtt} ms`;
+        pingMsg.status = 'ack';
+        renderChat();
+        logTerminal(`SMSGTE>KJ5NOV-7,WIDE1*::KJ5NOV   :ack${seq}`, 'RX');
+      }, 950);
+    };
 
     // --- SEND MESSAGE LOGIC ---
     chatForm.onsubmit = (e) => {
