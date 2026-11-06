@@ -61,6 +61,7 @@
                   root.insert(0, perm)
           tree.write(path, encoding="utf-8", xml_declaration=True)
           '
+          
       - name: Force Java 21 Toolchain & Compatibility
         script: |
           python3 -c '
@@ -86,6 +87,7 @@
               with open(props_path, "a") as f:
                   f.write("\norg.gradle.java.home=$JAVA_HOME\n")
           '
+          
       - name: Force Unified Kotlin Version
         script: |
           python3 -c '
