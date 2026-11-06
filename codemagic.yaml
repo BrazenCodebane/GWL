@@ -1,6 +1,6 @@
 workflows:
   android-aprs-sms-build:
-    name:APRS Tactical App (Linux X2 Build)
+    name:APRS-Lite App (Linux X2 Build)
     max_build_duration: 60
     instance_type: linux_x2
     
