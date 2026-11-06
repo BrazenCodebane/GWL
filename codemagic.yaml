@@ -65,6 +65,7 @@ workflows:
       - name: Force Java 21 Toolchain & Compatibility
         script: |
           python3 -c '
+          import os
           import glob
           
           # Force java target compatibility in all build.gradle files
@@ -72,7 +73,6 @@ workflows:
               with open(path, "r") as f:
                   content = f.read()
               
-              # Replace or inject source/target compatibility
               if "sourceCompatibility" in content:
                   content = content.replace("JavaVersion.VERSION_1_17", "JavaVersion.VERSION_21")
                   content = content.replace("JavaVersion.VERSION_11", "JavaVersion.VERSION_21")
