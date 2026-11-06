@@ -1,6 +1,6 @@
 workflows:
   android-aprs-sms-build:
-    name: Graywolf APRS Tactical App (Linux X2 Build)
+    name:APRS Tactical App (Linux X2 Build)
     max_build_duration: 60
     instance_type: linux_x2
     
@@ -39,7 +39,7 @@ workflows:
     publishing:
       email:
         recipients:
-          - kj5nov@arrl.net
+          - freakycdk@gmail.com
         notify:
           on_success: true
           on_failure: true
