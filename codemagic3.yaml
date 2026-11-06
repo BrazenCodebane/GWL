@@ -1,0 +1,45 @@
+workflows:
+  android-aprs-sms-build:
+    name: Graywolf APRS Tactical App (Linux X2 Build)
+    max_build_duration: 60
+    instance_type: linux_x2
+    
+    environment:
+      flutter: stable
+      java: 17
+      vars:
+        PACKAGE_NAME: "com.graywolf.aprs.sms"
+
+    triggering:
+      events:
+        - push
+        - pull_request
+      branch_patterns:
+        - pattern: 'main'
+          include: true
+
+    scripts:
+      - name: Set up Android SDK location
+        script: |
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/android/local.properties" || true
+
+      - name: Get Flutter dependencies
+        script: |
+          flutter pub get
+
+      - name: Build Android Release APK & Bundle
+        script: |
+          flutter build apk --release --build-number=$BUILD_NUMBER
+          flutter build appbundle --release --build-number=$BUILD_NUMBER
+
+    artifacts:
+      - build/app/outputs/flutter-apk/*.apk
+      - build/app/outputs/bundle/release/*.aab
+
+    publishing:
+      email:
+        recipients:
+          - kj5nov@arrl.net
+        notify:
+          on_success: true
+          on_failure: true
