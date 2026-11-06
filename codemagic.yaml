@@ -1,4 +1,4 @@
-workflows:
+  workflows:
   android-aprs-sms-build:
     name: APRS-Lite App (Linux X2 Build)
     max_build_duration: 60
@@ -61,7 +61,31 @@ workflows:
                   root.insert(0, perm)
           tree.write(path, encoding="utf-8", xml_declaration=True)
           '
-
+      - name: Force Java 21 Toolchain & Compatibility
+        script: |
+          python3 -c '
+          import glob
+          
+          # Force java target compatibility in all build.gradle files
+          for path in glob.glob("android/**/build.gradle", recursive=True):
+              with open(path, "r") as f:
+                  content = f.read()
+              
+              # Replace or inject source/target compatibility
+              if "sourceCompatibility" in content:
+                  content = content.replace("JavaVersion.VERSION_1_17", "JavaVersion.VERSION_21")
+                  content = content.replace("JavaVersion.VERSION_11", "JavaVersion.VERSION_21")
+                  content = content.replace("JavaVersion.VERSION_1_8", "JavaVersion.VERSION_21")
+              
+              with open(path, "w") as f:
+                  f.write(content)
+          
+          # Ensure project root gradle.properties uses Java 21 compatible settings if needed
+          props_path = "android/gradle.properties"
+          if os.path.exists(props_path):
+              with open(props_path, "a") as f:
+                  f.write("\norg.gradle.java.home=$JAVA_HOME\n")
+          '
       - name: Force Unified Kotlin Version
         script: |
           python3 -c '
