@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Graywolf APRS Tactical Dashboard - Light Mode</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              bg: '#F3F4F6',          // Light gray canvas
+              panel: '#FFFFFF',       // Clean white containers
+              border: '#E5E7EB',      // Soft border dividers
+              text: '#111827',        // Crisp dark text
+              muted: '#6B7280',       // Muted gray labels
+              accent: '#059669',      // Deep mint green (light mode accessible)
+              accentLight: '#D1FAE5', // Mint highlight container
+              cyan: '#0284C7',        // Tactical cyan/blue
+              cyanLight: '#E0F2FE',   // Cyan highlight container
+              amber: '#D97706',       // Warning / Pending ACK amber
+              red: '#DC2626',         // PTT / Error alert red
+            }
+          },
+          fontFamily: {
+            mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
+            sans: ['Inter', 'system-ui', 'sans-serif']
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Custom Scrollbar for Light Tactical Feel */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #F3F4F6; }
+    ::-webkit-scrollbar-thumb { background: #D1D5DB; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #9CA3AF; }
+
+    /* CRT Scanline Overlay Effect for Terminal (Light Mode) */
+    .scanlines {
+      background: linear-gradient(
+        rgba(0, 0, 0, 0) 50%, 
+        rgba(0, 0, 0, 0.03) 50%
+      );
+      background-size: 100% 4px;
+    }
+  </style>
+</head>
+<body class="bg-brand-bg text-brand-text font-sans antialiased h-screen flex flex-col overflow-hidden select-none">
+
+  <!-- TOP HEADER / TACTICAL HUD BAR -->
+  <header class="bg-brand-panel border-b border-brand-border px-4 py-3 flex items-center justify-between shadow-sm z-10">
+    <div class="flex items-center space-x-3">
+      <div class="w-8 h-8 rounded bg-brand-accentLight border border-brand-accent flex items-center justify-center font-mono font-bold text-brand-accent text-sm">
+        GW
+      </div>
+      <div>
+        <h1 class="font-bold text-sm tracking-wide text-brand-text flex items-center gap-2">
+          GRAYWOLF <span class="text-xs bg-brand-accentLight text-brand-accent px-1.5 py-0.5 rounded font-mono font-semibold">SMS LITE</span>
+        </h1>
+        <p class="text-xs font-mono text-brand-muted">CALLSIGN: <span class="text-brand-cyan font-bold">KJ5NOV</span></p>
+      </div>
+    </div>
+
+    <!-- Live Telemetry Badges -->
+    <div class="hidden md:flex items-center space-x-4 font-mono text-xs">
+      <div class="flex items-center space-x-2 bg-brand-bg px-3 py-1.5 rounded border border-brand-border">
+        <span class="w-2 h-2 rounded-full bg-brand-accent animate-pulse"></span>
+        <span class="text-brand-muted">RF FREQ:</span>
+        <span class="font-bold text-brand-text">144.390 MHz</span>
+      </div>
+      <div class="flex items-center space-x-2 bg-brand-bg px-3 py-1.5 rounded border border-brand-border">
+        <span class="text-brand-muted">TNC LINK:</span>
+        <span class="font-bold text-brand-accent">AIOC (USB-C)</span>
+      </div>
+      <div class="flex items-center space-x-2 bg-brand-bg px-3 py-1.5 rounded border border-brand-border">
+        <span class="text-brand-muted">GATEWAY:</span>
+        <span class="font-bold text-brand-cyan">SMSGTE</span>
+      </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="flex items-center space-x-2">
+      <button id="toggle-terminal" class="px-3 py-1.5 text-xs font-mono font-semibold rounded bg-brand-bg border border-brand-border hover:border-brand-accent text-brand-text flex items-center gap-1.5 transition-colors">
+        <svg class="w-4 h-4 text-brand-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+        <span>PACKET LOG</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- MAIN APPS WRAPPER -->
+  <div class="flex-1 flex overflow-hidden relative">
+
+    <!-- LEFT SIDEBAR: CONTACTS LIST -->
+    <aside id="sidebar" class="w-full md:w-80 bg-brand-panel border-r border-brand-border flex flex-col z-10 transition-all duration-200">
+      
+      <!-- Contact Search & Add -->
+      <div class="p-3 border-b border-brand-border bg-brand-panel">
+        <div class="relative">
+          <input type="text" id="contact-search" placeholder="Search contacts or callsigns..." class="w-full bg-brand-bg border border-brand-border rounded px-3 py-2 text-xs font-mono text-brand-text placeholder-brand-muted focus:outline-none focus:border-brand-accent">
+        </div>
+      </div>
+
+      <!-- Active Thread List -->
+      <div class="flex-1 overflow-y-auto divide-y divide-brand-border" id="contact-list">
+        <!-- Contact items populated by JS -->
+      </div>
+
+      <!-- Quick Add Contact Footer -->
+      <div class="p-3 border-t border-brand-border bg-brand-bg">
+        <button id="btn-add-contact" class="w-full py-2 bg-brand-panel border border-brand-border hover:border-brand-accent rounded text-xs font-mono font-semibold text-brand-text flex items-center justify-center gap-2 shadow-sm transition-all">
+          <svg class="w-4 h-4 text-brand-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+          <span>NEW SMS TARGET</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- CENTER CHAT CONTAINER -->
+    <main class="flex-1 flex flex-col bg-brand-bg relative overflow-hidden">
+      
+      <!-- Thread Top Header -->
+      <div class="bg-brand-panel border-b border-brand-border px-4 py-3 flex items-center justify-between shadow-sm">
+        <div class="flex items-center space-x-3">
+          <button id="btn-back" class="md:hidden p-1 text-brand-muted hover:text-brand-text">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+          </button>
+          <div class="w-10 h-10 rounded-full bg-brand-cyanLight border border-brand-cyan flex items-center justify-center font-bold text-brand-cyan font-mono text-sm" id="active-avatar">
+            SK
+          </div>
+          <div>
+            <h2 class="font-bold text-sm text-brand-text flex items-center gap-2" id="active-name">
+              Saraya Kingsley
+            </h2>
+            <p class="text-xs font-mono text-brand-muted" id="active-target">
+              TARGET: <span class="text-brand-cyan font-bold">SMSGTE</span> (@18175550199)
+            </p>
+          </div>
+        </div>
+
+        <div class="flex items-center space-x-3 font-mono text-xs">
+          <div class="hidden sm:flex flex-col items-end text-brand-muted">
+            <span>PACKET STATUS: <strong class="text-brand-accent" id="status-ack">ACK 100%</strong></span>
+            <span>BEARING: <strong class="text-brand-text">240° SW (1.4 mi)</strong></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Messages Stream -->
+      <div class="flex-1 overflow-y-auto p-4 space-y-4" id="chat-stream">
+        <!-- Messages populated by JS -->
+      </div>
+
+      <!-- Tactical Quick Presets Bar -->
+      <div class="px-4 py-2 bg-brand-panel border-t border-brand-border flex items-center space-x-2 overflow-x-auto text-xs font-mono">
+        <span class="text-brand-muted whitespace-nowrap">PRESETS:</span>
+        <button class="preset-btn px-2.5 py-1 rounded bg-brand-bg border border-brand-border hover:border-brand-accent text-brand-text whitespace-nowrap transition-colors" data-msg="En route to location. ETA 15m.">En route (15m)</button>
+        <button class="preset-btn px-2.5 py-1 rounded bg-brand-bg border border-brand-border hover:border-brand-accent text-brand-text whitespace-nowrap transition-colors" data-msg="Arrived at grid square. Standing by.">Arrived / Standing by</button>
+        <button class="preset-btn px-2.5 py-1 rounded bg-brand-bg border border-brand-border hover:border-brand-accent text-brand-text whitespace-nowrap transition-colors" data-msg="Radio test OK. Signal strength 5x9.">Radio Test 5x9</button>
+      </div>
+
+      <!-- Message Composition Footer -->
+      <div class="p-4 bg-brand-panel border-t border-brand-border shadow-lg">
+        <form id="chat-form" class="flex items-center space-x-3">
+          <div class="flex-1 relative">
+            <input type="text" id="message-input" placeholder="Type SMS message..." maxlength="67" class="w-full bg-brand-bg border border-brand-border rounded px-4 py-3 text-sm font-mono text-brand-text placeholder-brand-muted focus:outline-none focus:border-brand-accent pr-16 shadow-inner" autocomplete="off">
+            <span id="char-counter" class="absolute right-3 top-3.5 text-xs font-mono text-brand-muted">0/67</span>
+          </div>
+          <button type="submit" id="btn-send" class="px-5 py-3 bg-brand-accent hover:bg-emerald-600 text-white font-mono font-bold text-xs rounded flex items-center justify-center space-x-2 shadow transition-all">
+            <span>TX SEND</span>
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+          </button>
+        </form>
+      </div>
+    </main>
+
+    <!-- RIGHT SLIDE-OUT: RAW AX.25 TERMINAL PACKET LOG -->
+    <aside id="terminal-drawer" class="absolute right-0 top-0 bottom-0 w-full md:w-96 bg-gray-900 border-l border-gray-700 flex flex-col z-20 transform translate-x-full transition-transform duration-300 shadow-2xl">
+      <div class="p-3 bg-gray-950 border-b border-gray-800 flex items-center justify-between text-gray-200">
+        <div class="flex items-center space-x-2 font-mono text-xs">
+          <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span class="font-bold tracking-wider text-emerald-400">AX.25 RAW PACKET LOG</span>
+        </div>
+        <button id="close-terminal" class="text-gray-400 hover:text-white p-1">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+      </div>
+
+      <!-- Terminal Output Container -->
+      <div class="flex-1 p-3 font-mono text-xs overflow-y-auto space-y-2 bg-gray-950 text-emerald-400 scanlines" id="terminal-log">
+        <div class="text-gray-500">// Graywolf TNC v2.4 initialized...</div>
+        <div class="text-gray-500">// Connected to AIOC / UV-5R on 144.390 MHz</div>
+        <div class="text-gray-500">// Audio AFSK 1200 Baud Demodulator READY</div>
+      </div>
+
+      <div class="p-2 bg-gray-950 border-t border-gray-800 flex items-center justify-between font-mono text-xs text-gray-400">
+        <span>BAUD: 1200 AFSK</span>
+        <button id="clear-terminal" class="hover:text-emerald-400">CLEAR LOG</button>
+      </div>
+    </aside>
+
+  </div>
+
+  <!-- JAVASCRIPT LOGIC ENGINE -->
+  <script>
+    // --- STATE MANAGEMENT ---
+    const state = {
+      contacts: [
+        {
+          id: 'c1',
+          name: 'Saraya Kingsley',
+          phone: '18175550199',
+          callsign: 'SMSGTE',
+          avatar: 'SK',
+          messages: [
+            { id: 1, sender: 'them', text: 'Hey Cameron, did you get the station set up?', time: '10:14 AM', status: 'ack' },
+            { id: 2, sender: 'me', text: 'Yes! ESP32 CYD and AIOC are active.', time: '10:15 AM', status: 'ack' },
+            { id: 3, sender: 'them', text: 'Awesome. Testing SMSGTE gateway route.', time: '10:16 AM', status: 'ack' }
+          ]
+        },
+        {
+          id: 'c2',
+          name: 'Micheal Bruce',
+          phone: '17135550144',
+          callsign: 'SMSGTE',
+          avatar: 'MB',
+          messages: [
+            { id: 1, sender: 'me', text: 'Testing APRS SMS bridge from Richland Hills.', time: 'Yesterday', status: 'ack' }
+          ]
+        }
+      ],
+      activeContactId: 'c1',
+      terminalOpen: false,
+      seqCounter: 1
+    };
+
+    // --- AUDIO SYNTHESIZER (TONE.JS AFSK SIMULATION) ---
+    function playAFSKBurst() {
+      try {
+        const synth = new Tone.Synth({
+          oscillator: { type: 'sine' },
+          envelope: { attack: 0.005, decay: 0.05, sustain: 0.8, release: 0.01 }
+        }).toDestination();
+
+        const now = Tone.now();
+        // Bell 202 Tones: 1200Hz (Mark) & 2200Hz (Space)
+        synth.triggerAttackRelease(1200, 0.03, now);
+        synth.triggerAttackRelease(2200, 0.03, now + 0.03);
+        synth.triggerAttackRelease(1200, 0.03, now + 0.06);
+        synth.triggerAttackRelease(2200, 0.04, now + 0.09);
+      } catch (e) {
+        console.log('Audio Context restricted or pending interaction');
+      }
+    }
+
+    // --- DOM ELEMENTS ---
+    const sidebar = document.getElementById('sidebar');
+    const contactListEl = document.getElementById('contact-list');
+    const chatStreamEl = document.getElementById('chat-stream');
+    const chatForm = document.getElementById('chat-form');
+    const messageInput = document.getElementById('message-input');
+    const charCounter = document.getElementById('char-counter');
+    const terminalDrawer = document.getElementById('terminal-drawer');
+    const terminalLog = document.getElementById('terminal-log');
+    const toggleTerminalBtn = document.getElementById('toggle-terminal');
+    const closeTerminalBtn = document.getElementById('close-terminal');
+    const clearTerminalBtn = document.getElementById('clear-terminal');
+
+    const activeNameEl = document.getElementById('active-name');
+    const activeTargetEl = document.getElementById('active-target');
+    const activeAvatarEl = document.getElementById('active-avatar');
+    const btnBack = document.getElementById('btn-back');
+
+    // --- RENDER CONTACTS ---
+    function renderContacts() {
+      contactListEl.innerHTML = '';
+      state.contacts.forEach(contact => {
+        const isActive = contact.id === state.activeContactId;
+        const lastMsg = contact.messages[contact.messages.length - 1];
+        
+        const el = document.createElement('div');
+        el.className = `p-3 flex items-center space-x-3 cursor-pointer transition-colors ${isActive ? 'bg-brand-accentLight border-l-4 border-brand-accent' : 'hover:bg-gray-100'}`;
+        el.onclick = () => selectContact(contact.id);
+
+        el.innerHTML = `
+          <div class="w-10 h-10 rounded-full bg-brand-cyanLight border border-brand-cyan flex items-center justify-center font-bold text-brand-cyan font-mono text-sm">
+            ${contact.avatar}
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="flex justify-between items-baseline">
+              <h3 class="text-sm font-bold truncate text-brand-text">${contact.name}</h3>
+              <span class="text-xs font-mono text-brand-muted">${lastMsg ? lastMsg.time : ''}</span>
+            </div>
+            <p class="text-xs font-mono text-brand-muted truncate">${lastMsg ? lastMsg.text : 'No messages'}</p>
+          </div>
+        `;
+        contactListEl.appendChild(el);
+      });
+    }
+
+    // --- RENDER CHAT STREAM ---
+    function renderChat() {
+      const contact = state.contacts.find(c => c.id === state.activeContactId);
+      if (!contact) return;
+
+      activeNameEl.innerText = contact.name;
+      activeTargetEl.innerHTML = `TARGET: <span class="text-brand-cyan font-bold">SMSGTE</span> (@${contact.phone})`;
+      activeAvatarEl.innerText = contact.avatar;
+
+      chatStreamEl.innerHTML = '';
+      contact.messages.forEach(msg => {
+        const isMe = msg.sender === 'me';
+        const msgEl = document.createElement('div');
+        msgEl.className = `flex flex-col ${isMe ? 'items-end' : 'items-start'}`;
+
+        const statusIcon = isMe 
+          ? (msg.status === 'ack' 
+              ? `<span class="text-brand-accent font-bold">✓✓ ACK</span>` 
+              : `<span class="text-brand-amber font-bold animate-pulse">⏳ ENQUEUED</span>`)
+          : '';
+
+        msgEl.innerHTML = `
+          <div class="max-w-[85%] md:max-w-[70%] rounded-lg px-4 py-2.5 shadow-sm text-sm font-mono ${isMe ? 'bg-brand-accent text-white rounded-br-none' : 'bg-brand-panel border border-brand-border text-brand-text rounded-bl-none'}">
+            ${msg.text}
+          </div>
+          <div class="flex items-center space-x-2 mt-1 text-[10px] font-mono text-brand-muted">
+            <span>${msg.time}</span>
+            ${statusIcon ? `<span>•</span>${statusIcon}` : ''}
+          </div>
+        `;
+        chatStreamEl.appendChild(msgEl);
+      });
+
+      chatStreamEl.scrollTop = chatStreamEl.scrollHeight;
+    }
+
+    // --- SELECT CONTACT ---
+    function selectContact(id) {
+      state.activeContactId = id;
+      renderContacts();
+      renderChat();
+      // Mobile responsive toggle
+      sidebar.classList.add('hidden', 'md:flex');
+    }
+
+    // --- TERMINAL LOGGING ---
+    function logTerminal(rawPacket, direction = 'RX') {
+      const entry = document.createElement('div');
+      const time = new Date().toLocaleTimeString();
+      const color = direction === 'TX' ? 'text-amber-400' : 'text-emerald-400';
+      
+      entry.className = 'font-mono text-xs leading-relaxed break-all';
+      entry.innerHTML = `<span class="text-gray-500">[${time}]</span> <span class="${color} font-bold">${direction}</span> ${rawPacket}`;
+      
+      terminalLog.appendChild(entry);
+      terminalLog.scrollTop = terminalLog.scrollHeight;
+    }
+
+    // --- SEND MESSAGE LOGIC ---
+    chatForm.onsubmit = (e) => {
+      e.preventDefault();
+      const text = messageInput.value.trim();
+      if (!text) return;
+
+      const contact = state.contacts.find(c => c.id === state.activeContactId);
+      const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const seq = String(state.seqCounter++).padStart(2, '0');
+
+      // 1. Add locally
+      const newMsg = { id: Date.now(), sender: 'me', text, time: timeStr, status: 'sending' };
+      contact.messages.push(newMsg);
+      renderChat();
+      messageInput.value = '';
+      charCounter.innerText = '0/67';
+
+      // 2. Play AFSK sound & Log AX.25 Frame
+      playAFSKBurst();
+      const rawAX25 = `KJ5NOV-7>APRS,WIDE1-1::SMSGTE   :@${contact.phone} ${text}{${seq}`;
+      logTerminal(rawAX25, 'TX');
+
+      // 3. Simulate ACK over-the-air after 1.2 seconds
+      setTimeout(() => {
+        newMsg.status = 'ack';
+        renderChat();
+        logTerminal(`SMSGTE>KJ5NOV-7,WIDE1*::KJ5NOV   :ack${seq}`, 'RX');
+      }, 1200);
+    };
+
+    // --- CHARACTER COUNTER ---
+    messageInput.addEventListener('input', (e) => {
+      charCounter.innerText = `${e.target.value.length}/67`;
+    });
+
+    // --- PRESETS ---
+    document.querySelectorAll('.preset-btn').forEach(btn => {
+      btn.onclick = () => {
+        messageInput.value = btn.dataset.msg;
+        charCounter.innerText = `${messageInput.value.length}/67`;
+        messageInput.focus();
+      };
+    });
+
+    // --- TERMINAL DRAWER TOGGLES ---
+    toggleTerminalBtn.onclick = () => {
+      terminalDrawer.classList.remove('translate-x-full');
+    };
+    closeTerminalBtn.onclick = () => {
+      terminalDrawer.classList.add('translate-x-full');
+    };
+    clearTerminalBtn.onclick = () => {
+      terminalLog.innerHTML = '<div class="text-gray-500">// Terminal log cleared.</div>';
+    };
+
+    btnBack.onclick = () => {
+      sidebar.classList.remove('hidden');
+    };
+
+    // --- INITIALIZATION ---
+    renderContacts();
+    renderChat();
+  </script>
+</body>
+</html>
