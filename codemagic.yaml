@@ -23,13 +23,13 @@ workflows:
         script: |
           npm init -y
           npm install @capacitor/core @capacitor/cli @capacitor/android
-          npx cap init "Graywolf APRS" "com.gwl.aprs.sms" --web-dir www
+          npx cap init "APRS-Lite" "com.gwl.aprs.sms" --web-dir www
 
       - name: Prepare www assets & Capacitor Config
         script: |
           mkdir -p www
           cp index.html www/index.html
-          echo '{"appId": "com.gwl.aprs.sms", "appName": "Graywolf APRS", "webDir": "www"}' > capacitor.config.json
+          echo '{"appId": "com.gwl.aprs.sms", "appName": "APRS-Lite", "webDir": "www"}' > capacitor.config.json
 
       - name: Initialize Android Platform & Sync
         script: |
