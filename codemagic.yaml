@@ -31,7 +31,23 @@ workflows:
         script: |
           flutter build apk --release --build-number=$BUILD_NUMBER
           flutter build appbundle --release --build-number=$BUILD_NUMBER
-
+          
+      - name: Ensure Bluetooth Permissions in AndroidManifest
+        script: |
+          # Automatically injects BLUETOOTH_CONNECT and BLUETOOTH_SCAN if missing
+          MANIFEST_PATH="$CM_BUILD_DIR/android/app/src/main/AndroidManifest.xml"
+          if [ -f "$MANIFEST_PATH" ]; then
+            echo "Checking AndroidManifest.xml for Bluetooth permissions..."
+            if ! grep -q "android.permission.BLUETOOTH_CONNECT" "$MANIFEST_PATH"; then
+              sed -i '/<application/i \    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />\n    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />\n    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />\n    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />' "$MANIFEST_PATH"
+              echo "Bluetooth permissions injected successfully."
+            else
+              echo "Bluetooth permissions already exist in Manifest."
+            fi
+          else
+            echo "Warning: AndroidManifest.xml not found at expected path."
+          fi
+          
     artifacts:
       - build/app/outputs/flutter-apk/*.apk
       - build/app/outputs/bundle/release/*.aab
